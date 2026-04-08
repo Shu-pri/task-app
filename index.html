@@ -263,6 +263,36 @@
   <div id="calendarTasks"></div>
 </div>
 <script>
+  /* 🔹 ここから追加（最重要） */
+  const mustTab = document.getElementById("mustTab");
+  const wantTab = document.getElementById("wantTab");
+  const listTab = document.getElementById("listTab");
+  const calendarTab = document.getElementById("calendarTab");
+
+  const listView = document.getElementById("listView");
+  const calendarView = document.getElementById("calendarView");
+
+  const taskListEl = document.getElementById("taskList");
+  const addBtn = document.getElementById("addBtn");
+  const addModal = document.getElementById("addModal");
+  const saveTaskBtn = document.getElementById("saveTask");
+  const taskInput = document.getElementById("taskInput");
+  const timeInput = document.getElementById("timeInput");
+  const repeatInput = document.getElementById("repeatInput");
+
+  const editModal = document.getElementById("editModal");
+  const editTaskInput = document.getElementById("editTaskInput");
+  const editTimeInput = document.getElementById("editTimeInput");
+  const editRepeatInput = document.getElementById("editRepeatInput");
+  const updateTaskBtn = document.getElementById("updateTask");
+
+  const monthLabel = document.getElementById("monthLabel");
+  const calendarGrid = document.getElementById("calendarGrid");
+  const calendarTasks = document.getElementById("calendarTasks");
+  const prevMonthBtn = document.getElementById("prevMonth");
+  const nextMonthBtn = document.getElementById("nextMonth");
+  /* 🔹 ここまで追加 */
+
   let currentTab = "must";
   let currentFilter = "all";
 
