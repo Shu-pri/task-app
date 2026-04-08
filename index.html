@@ -448,6 +448,25 @@
   /* -----------------------------
       編集モーダル
   ----------------------------- */
+  <!-- 編集モーダル -->
+<div id="editModal" style="display:none;">
+  <div class="modal-content">
+    <h3>タスクを編集</h3>
+
+    <input id="editTaskInput" placeholder="タスク名" />
+    <input id="editTimeInput" type="datetime-local" />
+    <select id="editRepeatInput">
+      <option value="">繰り返しなし</option>
+      <option value="daily">毎日</option>
+      <option value="weekly">毎週</option>
+      <option value="monthly">毎月</option>
+    </select>
+
+    <!-- 🔥 これが無いと updateTask が null になる -->
+    <button id="updateTask">更新</button>
+  </div>
+</div>
+
   function openEditModal(index) {
     editingIndex = index;
     const task = tasks[currentTab][index];
