@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>タスク管理</title>
+<link rel="manifest" href="manifest.json" />
+<style>
+  body {
+    margin: 0;
+    font-family: sans-serif;
+    background: #ffffff;
+    color: #333;
+  }
+
+  header {
+    background: #4FC3F7;
+    color: white;
+    padding: 16px;
+    font-size: 20px;
+    text-align: center;
+  }
+
+  .tabs {
+    display: flex;
+    border-bottom: 2px solid #4FC3F7;
+  }
+
+  .tab {
+    flex: 1;
+    text-align: center;
+    padding: 12px;
+    cursor: pointer;
+    font-weight: bold;
+  }
+
+  .tab.active {
+    background: #E1F5FE;
+    color: #0277BD;
+  }
+
+  .task-list {
+    padding: 16px;
+  }
+
+  .task {
+    background: #fff;
+    border-left: 4px solid #44C3F7;
+    padding: 12px;
+    margin-bottom: 12px;
+    border-radius: 6px;
+  }
+
+  .add-btn {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    width: 56px;
+    height: 56px;
+    background: #4FC3F7;
+    border-radius: 50%;
+    color: white;
+    font-size: 32px;
+    text-align: center;
+    line-height: 56px;
+    cursor: pointer;
+  }
+
+  #addModal {
+    position: fixed;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    background: rgba(0,0,0,0.4);
+    display: none;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .modal-content {
+    background: white;
+    padding: 20px;
+    width: 80%;
+    border-radius: 8px;
+  }
+
+  input {
+    width: 100%;
+    padding: 10px;
+    margin-bottom: 12px;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+  }
+
+  button {
+    width: 100%;
+    padding: 12px;
+    background: #4FC3F7;
+    border: none;
+    color: white;
+    font-size: 16px;
+    border-radius: 6px;
+  }
+</style>
+</head>
+
+<body>
+<header>タスク管理</header>
+
+<div class="tabs">
+  <div class="tab active" id="mustTab">やるべきこと</div>
+  <div class="tab" id="wantTab">やりたいこと</div>
+</div>
+
+<div class="task-list" id="taskList"></div>
+
+<div class="add-btn" id="addBtn">＋</div>
+
+<div id="addModal">
+  <div class="modal-content">
+    <h3>タスクを追加</h3>
+    <input id="taskInput" placeholder="タスク名" />
+    <input id="timeInput" type="datetime-local" />
+    <button id="saveTask">追加</button>
+  </div>
+</div>
+
+<script>
+  let currentTab = "must";
+  const tasks = JSON.parse(localStorage.getItem("tasks") || '{"must":[],"want":[]}');
+
+  const mustTab = document.getElementById("mustTab");
+  const wantTab = document.getElementById("wantTab");
+  const taskList = document.getElementById("taskList");
+  const addBtn = document.getElementById("addBtn");
+  const addModal = document.getElementById("addModal");
+  const saveTask = document.getElementById("saveTask");
+  const taskInput = document.getElementById("taskInput");
+  const timeInput = document.getElementById("timeInput");
+
+  function saveData() {
+    localStorage.setItem("tasks", JSON.stringify(tasks));
+  }
+
+  function render() {
+    taskList.innerHTML = "";
+    tasks[currentTab].forEach(t => {
+      const div = document.createElement("div");
+      div.className = "task";
+      div.textContent = t.title + (t.time ? " ⏰ " + t.time : "");
+      taskList.appendChild(div);
+    });
+  }
+
+  mustTab.onclick = () => {
+    currentTab = "must";
+    mustTab.classList.add("active");
+    wantTab.classList.remove("active");
+    render();
+  };
+
+  wantTab.onclick = () => {
+    currentTab = "want";
+    wantTab.classList.add("active");
+    mustTab.classList.remove("active");
+    render();
+  };
+
+  addBtn.onclick = () => {
+    addModal.style.display = "flex";
+  };
+
+  addModal.onclick = (e) => {
+    if (e.target === addModal) addModal.style.display = "none";
+  };
+
+  saveTask.onclick = async () => {
+    const title = taskInput.value.trim();
+    const time = timeInput.value;
+
+    if (!title) return;
+
+    tasks[currentTab].push({ title, time });
+    saveData();
+    render();
+
+    if (time) {
+      const date = new Date(time);
+      const reg = await navigator.serviceWorker.getRegistration();
+      reg.showNotification("タスク通知", {
+        body: title,
+        tag: "task-" + Date.now(),
+        showTrigger: new TimestampTrigger(date.getTime())
+      });
+    }
+
+    taskInput.value = "";
+    timeInput.value = "";
+    addModal.style.display = "none";
+  };
+
+  if ("serviceWorker" in navigator) {
+    navigator.serviceWorker.register("service-worker.js");
+  }
+
+  render();
+</script>
+</body>
+</html>
