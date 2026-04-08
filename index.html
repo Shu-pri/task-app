@@ -39,6 +39,28 @@
     color: #0277BD;
   }
 
+  /* フィルタボタン */
+  .filters {
+    display: flex;
+    justify-content: space-around;
+    padding: 10px;
+    border-bottom: 1px solid #ddd;
+    background: #f7f7f7;
+  }
+
+  .filter-btn {
+    padding: 6px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    background: #e0e0e0;
+    font-size: 14px;
+  }
+
+  .filter-btn.active {
+    background: #4FC3F7;
+    color: white;
+  }
+
   .task-list {
     padding: 16px;
   }
@@ -52,6 +74,11 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
+  }
+
+  .task.completed {
+    opacity: 0.5;
+    text-decoration: line-through;
   }
 
   .task-buttons button {
@@ -94,7 +121,7 @@
     border-radius: 8px;
   }
 
-  input {
+  input, select {
     width: 100%;
     padding: 10px;
     margin-bottom: 12px;
@@ -122,6 +149,15 @@
   <div class="tab" id="wantTab">やりたいこと</div>
 </div>
 
+<!-- フィルタボタン -->
+<div class="filters">
+  <div class="filter-btn active" data-filter="all">すべて</div>
+  <div class="filter-btn" data-filter="incomplete">未完了</div>
+  <div class="filter-btn" data-filter="complete">完了</div>
+  <div class="filter-btn" data-filter="today">今日</div>
+  <div class="filter-btn" data-filter="expired">期限切れ</div>
+</div>
+
 <div class="task-list" id="taskList"></div>
 
 <div class="add-btn" id="addBtn">＋</div>
@@ -132,6 +168,15 @@
     <h3>タスクを追加</h3>
     <input id="taskInput" placeholder="タスク名" />
     <input id="timeInput" type="datetime-local" />
+
+    <!-- 🔁 繰り返し選択 -->
+    <select id="repeatInput">
+      <option value="">繰り返しなし</option>
+      <option value="daily">毎日</option>
+      <option value="weekly">毎週</option>
+      <option value="monthly">毎月</option>
+    </select>
+
     <button id="saveTask">追加</button>
   </div>
 </div>
@@ -142,42 +187,109 @@
     <h3>タスクを編集</h3>
     <input id="editTaskInput" />
     <input id="editTimeInput" type="datetime-local" />
+
+    <select id="editRepeatInput">
+      <option value="">繰り返しなし</option>
+      <option value="daily">毎日</option>
+      <option value="weekly">毎週</option>
+      <option value="monthly">毎月</option>
+    </select>
+
     <button id="updateTask">更新</button>
   </div>
 </div>
 
 <script>
   let currentTab = "must";
+  let currentFilter = "all";
+
   const tasks = JSON.parse(localStorage.getItem("tasks") || '{"must":[],"want":[]}');
 
-  const mustTab = document.getElementById("mustTab");
-  const wantTab = document.getElementById("wantTab");
-  const taskList = document.getElementById("taskList");
-  const addBtn = document.getElementById("addBtn");
-  const addModal = document.getElementById("addModal");
-  const saveTask = document.getElementById("saveTask");
-  const taskInput = document.getElementById("taskInput");
-  const timeInput = document.getElementById("timeInput");
-
-  const editModal = document.getElementById("editModal");
-  const editTaskInput = document.getElementById("editTaskInput");
-  const editTimeInput = document.getElementById("editTimeInput");
-  const updateTask = document.getElementById("updateTask");
-
   let editingIndex = null;
+  let draggingIndex = null;
 
   function saveData() {
     localStorage.setItem("tasks", JSON.stringify(tasks));
   }
 
+  function scheduleNotification(title, time) {
+    navigator.serviceWorker.getRegistration().then(reg => {
+      if (!reg) return;
+      const date = new Date(time);
+      reg.showNotification("タスク通知", {
+        body: title,
+        tag: "task-" + Date.now(),
+        showTrigger: new TimestampTrigger(date.getTime())
+      });
+    });
+  }
+
+  function applyFilter(list) {
+    const todayStr = new Date().toISOString().split("T")[0];
+
+    return list.filter(t => {
+      if (currentFilter === "incomplete") return !t.completed;
+      if (currentFilter === "complete") return t.completed;
+      if (currentFilter === "today") return t.time && t.time.startsWith(todayStr);
+      if (currentFilter === "expired") return t.time && !t.completed && new Date(t.time) < new Date();
+      return true;
+    });
+  }
+
   function render() {
+    const taskList = document.getElementById("taskList");
     taskList.innerHTML = "";
-    tasks[currentTab].forEach((t, index) => {
+
+    // ソート（未完了 → 完了、未完了は order 順）
+    tasks[currentTab].sort((a, b) => {
+      if (a.completed !== b.completed) return a.completed - b.completed;
+      if (a.completed) return 0;
+      return a.order - b.order;
+    });
+
+    const filtered = applyFilter(tasks[currentTab]);
+
+    filtered.forEach((t, index) => {
       const div = document.createElement("div");
       div.className = "task";
+      if (t.completed) div.classList.add("completed");
+
+      if (!t.completed) {
+        div.draggable = true;
+        div.ondragstart = () => draggingIndex = index;
+        div.ondragover = (e) => e.preventDefault();
+        div.ondrop = () => {
+          const list = tasks[currentTab];
+          const temp = list[draggingIndex].order;
+          list[draggingIndex].order = list[index].order;
+          list[index].order = temp;
+          saveData();
+          render();
+        };
+      }
+
+      const left = document.createElement("div");
+      left.style.display = "flex";
+      left.style.alignItems = "center";
+
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.checked = t.completed;
+      checkbox.onchange = () => toggleComplete(index);
+
+      const repeatIcon =
+        t.repeat === "daily" ? " 🔁daily" :
+        t.repeat === "weekly" ? " 🔁weekly" :
+        t.repeat === "monthly" ? " 🔁monthly" : "";
 
       const title = document.createElement("span");
-      title.textContent = t.title + (t.time ? " ⏰ " + t.time : "");
+      title.textContent =
+        " " + t.title +
+        (t.time ? " ⏰ " + t.time : "") +
+        repeatIcon;
+
+      left.appendChild(checkbox);
+      left.appendChild(title);
 
       const btns = document.createElement("div");
       btns.className = "task-buttons";
@@ -193,87 +305,63 @@
       btns.appendChild(editBtn);
       btns.appendChild(deleteBtn);
 
-      div.appendChild(title);
+      div.appendChild(left);
       div.appendChild(btns);
 
       taskList.appendChild(div);
     });
   }
 
-  mustTab.onclick = () => {
-    currentTab = "must";
-    mustTab.classList.add("active");
-    wantTab.classList.remove("active");
-    render();
-  };
+  function toggleComplete(index) {
+    const task = tasks[currentTab][index];
+    task.completed = !task.completed;
 
-  wantTab.onclick = () => {
-    currentTab = "want";
-    wantTab.classList.add("active");
-    mustTab.classList.remove("active");
-    render();
-  };
+    // 🔁 繰り返しタスク（B方式）
+    if (task.completed && task.repeat && task.time) {
+      const date = new Date(task.time);
 
-  addBtn.onclick = () => {
-    addModal.style.display = "flex";
-  };
+      if (task.repeat === "daily") date.setDate(date.getDate() + 1);
+      if (task.repeat === "weekly") date.setDate(date.getDate() + 7);
+      if (task.repeat === "monthly") date.setMonth(date.getMonth() + 1);
 
-  addModal.onclick = (e) => {
-    if (e.target === addModal) addModal.style.display = "none";
-  };
+      const nextTime = date.toISOString().slice(0, 16);
 
-  saveTask.onclick = async () => {
-    const title = taskInput.value.trim();
-    const time = timeInput.value;
-
-    if (!title) return;
-
-    tasks[currentTab].push({ title, time });
-    saveData();
-    render();
-
-    if (time) {
-      const date = new Date(time);
-      const reg = await navigator.serviceWorker.getRegistration();
-      reg.showNotification("タスク通知", {
-        body: title,
-        tag: "task-" + Date.now(),
-        showTrigger: new TimestampTrigger(date.getTime())
+      tasks[currentTab].push({
+        title: task.title,
+        time: nextTime,
+        completed: false,
+        order: Date.now(),
+        repeat: task.repeat
       });
+
+      scheduleNotification(task.title, nextTime);
     }
 
-    taskInput.value = "";
-    timeInput.value = "";
-    addModal.style.display = "none";
-  };
+    saveData();
+    render();
+  }
 
   function openEditModal(index) {
     editingIndex = index;
     const task = tasks[currentTab][index];
 
-    editTaskInput.value = task.title;
-    editTimeInput.value = task.time || "";
+    document.getElementById("editTaskInput").value = task.title;
+    document.getElementById("editTimeInput").value = task.time || "";
+    document.getElementById("editRepeatInput").value = task.repeat || "";
 
-    editModal.style.display = "flex";
+    document.getElementById("editModal").style.display = "flex";
   }
 
-  updateTask.onclick = () => {
-    const newTitle = editTaskInput.value.trim();
-    const newTime = editTimeInput.value;
+  document.getElementById("updateTask").onclick = () => {
+    const task = tasks[currentTab][editingIndex];
 
-    if (!newTitle) return;
-
-    tasks[currentTab][editingIndex].title = newTitle;
-    tasks[currentTab][editingIndex].time = newTime;
+    task.title = document.getElementById("editTaskInput").value.trim();
+    task.time = document.getElementById("editTimeInput").value;
+    task.repeat = document.getElementById("editRepeatInput").value;
 
     saveData();
     render();
-
-    editModal.style.display = "none";
-  };
-
-  editModal.onclick = (e) => {
-    if (e.target === editModal) editModal.style.display = "none";
+    document.getElementById("editModal").style.display = "none";
   };
 
   function deleteTask(index) {
@@ -281,6 +369,63 @@
     saveData();
     render();
   }
+
+  document.getElementById("mustTab").onclick = () => {
+    currentTab = "must";
+    mustTab.classList.add("active");
+    wantTab.classList.remove("active");
+    render();
+  };
+
+  document.getElementById("wantTab").onclick = () => {
+    currentTab = "want";
+    wantTab.classList.add("active");
+    mustTab.classList.remove("active");
+    render();
+  };
+
+  document.querySelectorAll(".filter-btn").forEach(btn => {
+    btn.onclick = () => {
+      document.querySelectorAll(".filter-btn").forEach(b => b.classList.remove("active"));
+      btn.classList.add("active");
+      currentFilter = btn.dataset.filter;
+      render();
+    };
+  });
+
+  document.getElementById("addBtn").onclick = () => {
+    document.getElementById("addModal").style.display = "flex";
+  };
+
+  document.getElementById("addModal").onclick = (e) => {
+    if (e.target === addModal) addModal.style.display = "none";
+  };
+
+  document.getElementById("saveTask").onclick = () => {
+    const title = taskInput.value.trim();
+    const time = timeInput.value;
+    const repeat = repeatInput.value;
+
+    if (!title) return;
+
+    tasks[currentTab].push({
+      title,
+      time,
+      completed: false,
+      order: Date.now(),
+      repeat
+    });
+
+    saveData();
+    render();
+
+    if (time) scheduleNotification(title, time);
+
+    taskInput.value = "";
+    timeInput.value = "";
+    repeatInput.value = "";
+    addModal.style.display = "none";
+  };
 
   if ("serviceWorker" in navigator) {
     navigator.serviceWorker.register("service-worker.js");
