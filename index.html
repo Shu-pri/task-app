@@ -22,23 +22,23 @@
   }
 
   /* 上部タブ（リスト / カレンダー） */
-  .view-tabs {
+  .main-tabs {
     display: flex;
     border-bottom: 2px solid #4FC3F7;
   }
-  .view-tab {
+  .main-tab {
     flex: 1;
     text-align: center;
     padding: 12px;
     cursor: pointer;
     font-weight: bold;
   }
-  .view-tab.active {
+  .main-tab.active {
     background: #E1F5FE;
     color: #0277BD;
   }
 
-  /* リスト画面のタブ（must / want） */
+  /* リスト画面のタブ（やるべき / やりたい） */
   .tabs {
     display: flex;
     border-bottom: 2px solid #4FC3F7;
@@ -75,10 +75,10 @@
     color: white;
   }
 
-  /* タスク一覧 */
   .task-list {
     padding: 16px;
   }
+
   .task {
     background: #fff;
     border-left: 4px solid #44C3F7;
@@ -89,10 +89,12 @@
     justify-content: space-between;
     align-items: center;
   }
+
   .task.completed {
     opacity: 0.5;
     text-decoration: line-through;
   }
+
   .task-buttons button {
     margin-left: 6px;
     border: none;
@@ -101,4 +103,556 @@
     cursor: pointer;
   }
 
-  /* 追加ボタン
+  .add-btn {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    width: 56px;
+    height: 56px;
+    background: #4FC3F7;
+    border-radius: 50%;
+    color: white;
+    font-size: 32px;
+    text-align: center;
+    line-height: 56px;
+    cursor: pointer;
+  }
+
+  /* モーダル */
+  #addModal, #editModal {
+    position: fixed;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    background: rgba(0,0,0,0.4);
+    display: none;
+    justify-content: center;
+    align-items: center;
+  }
+  .modal-content {
+    background: white;
+    padding: 20px;
+    width: 80%;
+    border-radius: 8px;
+  }
+  input, select {
+    width: 100%;
+    padding: 10px;
+    margin-bottom: 12px;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+  }
+  button {
+    width: 100%;
+    padding: 12px;
+    background: #4FC3F7;
+    border: none;
+    color: white;
+    font-size: 16px;
+    border-radius: 6px;
+  }
+
+  /* カレンダー画面 */
+  #calendarView {
+    display: none;
+    padding: 16px;
+  }
+
+  .calendar-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+  }
+  .month-btn {
+    background: #E1F5FE;
+    padding: 6px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+  }
+
+  .calendar-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 6px;
+  }
+
+  .day-name {
+    text-align: center;
+    font-weight: bold;
+    color: #0277BD;
+  }
+
+  .day-cell {
+    height: 60px;
+    border-radius: 12px;
+    background: #f0faff;
+    text-align: center;
+    padding-top: 6px;
+    cursor: pointer;
+    position: relative;
+  }
+
+  .day-cell.today {
+    background: #b3e5fc;
+    font-weight: bold;
+  }
+
+  .day-cell .dot {
+    width: 8px;
+    height: 8px;
+    background: #0277BD;
+    border-radius: 50%;
+    margin: 4px auto 0;
+  }
+
+  /* カレンダー下のタスク一覧 */
+  #calendarTasks {
+    margin-top: 20px;
+  }
+  #calendarTasks h3 {
+    margin-bottom: 10px;
+  }
+  .calendar-task {
+    background: #fff;
+    border-left: 4px solid #4FC3F7;
+    padding: 10px;
+    margin-bottom: 10px;
+    border-radius: 6px;
+  }
+</style>
+</head>
+
+<body>
+<header>タスク管理</header>
+
+<!-- メインタブ（リスト / カレンダー） -->
+<div class="main-tabs">
+  <div class="main-tab active" id="listTab">リスト</div>
+  <div class="main-tab" id="calendarTab">カレンダー</div>
+</div>
+
+<!-- リスト画面 -->
+<div id="listView">
+  <div class="tabs">
+    <div class="tab active" id="mustTab">やるべきこと</div>
+    <div class="tab" id="wantTab">やりたいこと</div>
+  </div>
+
+  <div class="filters">
+    <div class="filter-btn active" data-filter="all">すべて</div>
+    <div class="filter-btn" data-filter="incomplete">未完了</div>
+    <div class="filter-btn" data-filter="complete">完了</div>
+    <div class="filter-btn" data-filter="today">今日</div>
+    <div class="filter-btn" data-filter="expired">期限切れ</div>
+  </div>
+
+  <div class="task-list" id="taskList"></div>
+  <div class="add-btn" id="addBtn">＋</div>
+</div>
+
+<!-- カレンダー画面 -->
+<div id="calendarView">
+  <div class="calendar-header">
+    <div class="month-btn" id="prevMonth">◀</div>
+    <div id="monthLabel"></div>
+    <div class="month-btn" id="nextMonth">▶</div>
+  </div>
+
+  <div class="calendar-grid" id="calendarGrid"></div>
+
+  <div id="calendarTasks"></div>
+</div>
+<script>
+  let currentTab = "must";
+  let currentFilter = "all";
+
+  const tasks = JSON.parse(localStorage.getItem("tasks") || '{"must":[],"want":[]}');
+
+  let editingIndex = null;
+  let draggingIndex = null;
+
+  /* -----------------------------
+      共通：データ保存
+  ----------------------------- */
+  function saveData() {
+    localStorage.setItem("tasks", JSON.stringify(tasks));
+  }
+
+  /* -----------------------------
+      通知スケジュール
+  ----------------------------- */
+  function scheduleNotification(title, time) {
+    navigator.serviceWorker.getRegistration().then(reg => {
+      if (!reg) return;
+      const date = new Date(time);
+      reg.showNotification("タスク通知", {
+        body: title,
+        tag: "task-" + Date.now(),
+        showTrigger: new TimestampTrigger(date.getTime())
+      });
+    });
+  }
+
+  /* -----------------------------
+      フィルタ処理
+  ----------------------------- */
+  function applyFilter(list) {
+    const todayStr = new Date().toISOString().split("T")[0];
+
+    return list.filter(t => {
+      if (currentFilter === "incomplete") return !t.completed;
+      if (currentFilter === "complete") return t.completed;
+      if (currentFilter === "today") return t.time && t.time.startsWith(todayStr);
+      if (currentFilter === "expired") return t.time && !t.completed && new Date(t.time) < new Date();
+      return true;
+    });
+  }
+
+  /* -----------------------------
+      リスト画面の描画
+  ----------------------------- */
+  function render() {
+    const taskList = document.getElementById("taskList");
+    taskList.innerHTML = "";
+
+    // ソート（未完了 → 完了、未完了は order 順）
+    tasks[currentTab].sort((a, b) => {
+      if (a.completed !== b.completed) return a.completed - b.completed;
+      if (a.completed) return 0;
+      return a.order - b.order;
+    });
+
+    const filtered = applyFilter(tasks[currentTab]);
+
+    filtered.forEach((t, index) => {
+      const div = document.createElement("div");
+      div.className = "task";
+      if (t.completed) div.classList.add("completed");
+
+      if (!t.completed) {
+        div.draggable = true;
+        div.ondragstart = () => draggingIndex = index;
+        div.ondragover = (e) => e.preventDefault();
+        div.ondrop = () => {
+          const list = tasks[currentTab];
+          const temp = list[draggingIndex].order;
+          list[draggingIndex].order = list[index].order;
+          list[index].order = temp;
+          saveData();
+          render();
+        };
+      }
+
+      const left = document.createElement("div");
+      left.style.display = "flex";
+      left.style.alignItems = "center";
+
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.checked = t.completed;
+      checkbox.onchange = () => toggleComplete(index);
+
+      const repeatIcon =
+        t.repeat === "daily" ? " 🔁daily" :
+        t.repeat === "weekly" ? " 🔁weekly" :
+        t.repeat === "monthly" ? " 🔁monthly" : "";
+
+      const title = document.createElement("span");
+      title.textContent =
+        " " + t.title +
+        (t.time ? " ⏰ " + t.time : "") +
+        repeatIcon;
+
+      left.appendChild(checkbox);
+      left.appendChild(title);
+
+      const btns = document.createElement("div");
+      btns.className = "task-buttons";
+
+      const editBtn = document.createElement("button");
+      editBtn.textContent = "✏️";
+      editBtn.onclick = () => openEditModal(index);
+
+      const deleteBtn = document.createElement("button");
+      deleteBtn.textContent = "🗑️";
+      deleteBtn.onclick = () => deleteTask(index);
+
+      btns.appendChild(editBtn);
+      btns.appendChild(deleteBtn);
+
+      div.appendChild(left);
+      div.appendChild(btns);
+
+      taskList.appendChild(div);
+    });
+  }
+
+  /* -----------------------------
+      完了チェック（繰り返しタスク対応）
+  ----------------------------- */
+  function toggleComplete(index) {
+    const task = tasks[currentTab][index];
+    task.completed = !task.completed;
+
+    // 🔁 繰り返しタスク（B方式：履歴を残して次を新規追加）
+    if (task.completed && task.repeat && task.time) {
+      const date = new Date(task.time);
+
+      if (task.repeat === "daily") date.setDate(date.getDate() + 1);
+      if (task.repeat === "weekly") date.setDate(date.getDate() + 7);
+      if (task.repeat === "monthly") date.setMonth(date.getMonth() + 1);
+
+      const nextTime = date.toISOString().slice(0, 16);
+
+      tasks[currentTab].push({
+        title: task.title,
+        time: nextTime,
+        completed: false,
+        order: Date.now(),
+        repeat: task.repeat
+      });
+
+      scheduleNotification(task.title, nextTime);
+    }
+
+    saveData();
+    render();
+  }
+
+  /* -----------------------------
+      編集モーダル
+  ----------------------------- */
+  function openEditModal(index) {
+    editingIndex = index;
+    const task = tasks[currentTab][index];
+
+    document.getElementById("editTaskInput").value = task.title;
+    document.getElementById("editTimeInput").value = task.time || "";
+    document.getElementById("editRepeatInput").value = task.repeat || "";
+
+    document.getElementById("editModal").style.display = "flex";
+  }
+
+  document.getElementById("updateTask").onclick = () => {
+    const task = tasks[currentTab][editingIndex];
+
+    task.title = document.getElementById("editTaskInput").value.trim();
+    task.time = document.getElementById("editTimeInput").value;
+    task.repeat = document.getElementById("editRepeatInput").value;
+
+    saveData();
+    render();
+    document.getElementById("editModal").style.display = "none";
+  };
+
+  /* -----------------------------
+      タスク削除
+  ----------------------------- */
+  function deleteTask(index) {
+    tasks[currentTab].splice(index, 1);
+    saveData();
+    render();
+  }
+
+  /* -----------------------------
+      タブ切り替え（やるべき / やりたい）
+  ----------------------------- */
+  document.getElementById("mustTab").onclick = () => {
+    currentTab = "must";
+    mustTab.classList.add("active");
+    wantTab.classList.remove("active");
+    render();
+  };
+
+  document.getElementById("wantTab").onclick = () => {
+    currentTab = "want";
+    wantTab.classList.add("active");
+    mustTab.classList.remove("active");
+    render();
+  };
+
+  /* -----------------------------
+      フィルタボタン
+  ----------------------------- */
+  document.querySelectorAll(".filter-btn").forEach(btn => {
+    btn.onclick = () => {
+      document.querySelectorAll(".filter-btn").forEach(b => b.classList.remove("active"));
+      btn.classList.add("active");
+      currentFilter = btn.dataset.filter;
+      render();
+    };
+  });
+
+  /* -----------------------------
+      タスク追加モーダル
+  ----------------------------- */
+  document.getElementById("addBtn").onclick = () => {
+    document.getElementById("addModal").style.display = "flex";
+  };
+
+  document.getElementById("addModal").onclick = (e) => {
+    if (e.target === addModal) addModal.style.display = "none";
+  };
+
+  document.getElementById("saveTask").onclick = () => {
+    const title = taskInput.value.trim();
+    const time = timeInput.value;
+    const repeat = repeatInput.value;
+
+    if (!title) return;
+
+    tasks[currentTab].push({
+      title,
+      time,
+      completed: false,
+      order: Date.now(),
+      repeat
+    });
+
+    saveData();
+    render();
+
+    if (time) scheduleNotification(title, time);
+
+    taskInput.value = "";
+    timeInput.value = "";
+    repeatInput.value = "";
+    addModal.style.display = "none";
+  };
+
+  /* -----------------------------
+      メインタブ（リスト / カレンダー）
+  ----------------------------- */
+  const listView = document.getElementById("listView");
+  const calendarView = document.getElementById("calendarView");
+
+  document.getElementById("listTab").onclick = () => {
+    listTab.classList.add("active");
+    calendarTab.classList.remove("active");
+    listView.style.display = "block";
+    calendarView.style.display = "none";
+  };
+
+  document.getElementById("calendarTab").onclick = () => {
+    calendarTab.classList.add("active");
+    listTab.classList.remove("active");
+    listView.style.display = "none";
+    calendarView.style.display = "block";
+    renderCalendar();
+  };
+
+  /* -----------------------------
+      カレンダー生成
+  ----------------------------- */
+  let currentYear = new Date().getFullYear();
+  let currentMonth = new Date().getMonth();
+
+  function renderCalendar() {
+    const monthLabel = document.getElementById("monthLabel");
+    const grid = document.getElementById("calendarGrid");
+    const calendarTasks = document.getElementById("calendarTasks");
+
+    monthLabel.textContent = `${currentYear}年${currentMonth + 1}月`;
+    grid.innerHTML = "";
+    calendarTasks.innerHTML = "";
+
+    const firstDay = new Date(currentYear, currentMonth, 1).getDay();
+    const lastDate = new Date(currentYear, currentMonth + 1, 0).getDate();
+
+    const dayNames = ["日", "月", "火", "水", "木", "金", "土"];
+    dayNames.forEach(d => {
+      const div = document.createElement("div");
+      div.className = "day-name";
+      div.textContent = d;
+      grid.appendChild(div);
+    });
+
+    for (let i = 0; i < firstDay; i++) {
+      const empty = document.createElement("div");
+      grid.appendChild(empty);
+    }
+
+    for (let d = 1; d <= lastDate; d++) {
+      const cell = document.createElement("div");
+      cell.className = "day-cell";
+
+      const dateStr = `${currentYear}-${String(currentMonth + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+
+      const todayStr = new Date().toISOString().split("T")[0];
+      if (dateStr === todayStr) cell.classList.add("today");
+
+      cell.textContent = d;
+
+      const hasTask = tasks[currentTab].some(t => t.time && t.time.startsWith(dateStr));
+      if (hasTask) {
+        const dot = document.createElement("div");
+        dot.className = "dot";
+        cell.appendChild(dot);
+      }
+
+      cell.onclick = () => showCalendarTasks(dateStr);
+
+      grid.appendChild(cell);
+    }
+  }
+
+  /* -----------------------------
+      カレンダー：日付クリックでタスク表示
+  ----------------------------- */
+  function showCalendarTasks(dateStr) {
+    const calendarTasks = document.getElementById("calendarTasks");
+    calendarTasks.innerHTML = `<h3>${dateStr} のタスク</h3>`;
+
+    const list = tasks[currentTab].filter(t => t.time && t.time.startsWith(dateStr));
+
+    if (list.length === 0) {
+      calendarTasks.innerHTML += "<p>タスクはありません。</p>";
+      return;
+    }
+
+    list.forEach(t => {
+      const div = document.createElement("div");
+      div.className = "calendar-task";
+
+      const repeatIcon =
+        t.repeat === "daily" ? " 🔁daily" :
+        t.repeat === "weekly" ? " 🔁weekly" :
+        t.repeat === "monthly" ? " 🔁monthly" : "";
+
+      div.textContent = `${t.title} ${t.time ? "⏰" + t.time : ""}${repeatIcon}`;
+      calendarTasks.appendChild(div);
+    });
+  }
+
+  /* -----------------------------
+      月移動
+  ----------------------------- */
+  document.getElementById("prevMonth").onclick = () => {
+    currentMonth--;
+    if (currentMonth < 0) {
+      currentMonth = 11;
+      currentYear--;
+    }
+    renderCalendar();
+  };
+
+  document.getElementById("nextMonth").onclick = () => {
+    currentMonth++;
+    if (currentMonth > 11) {
+      currentMonth = 0;
+      currentYear++;
+    }
+    renderCalendar();
+  };
+
+  /* -----------------------------
+      Service Worker
+  ----------------------------- */
+  if ("serviceWorker" in navigator) {
+    navigator.serviceWorker.register("service-worker.js");
+  }
+
+  render();
+</script>
+</body>
+</html>
